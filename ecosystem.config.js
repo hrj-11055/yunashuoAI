@@ -7,7 +7,7 @@ module.exports = {
       env_file: '/var/www/yunashuoAI/.env.local',
       env: {
         NODE_ENV: 'production',
-        PORT: 3001,
+        PORT: 3002,
       },
       max_memory_restart: '400M',
       error_file: '/var/log/yunashuo/backend-error.log',

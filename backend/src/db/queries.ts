@@ -27,8 +27,8 @@ export interface RelayKey {
 
 export interface CallLog {
   id: number
-  relay_key_id: number
-  channel_id: number
+  relay_key_id: number | null
+  channel_id: number | null
   model: string
   prompt_tokens: number
   completion_tokens: number
@@ -53,10 +53,13 @@ export const channelQueries = {
       VALUES (@name, @model_id, @api_key, @base_url, @billing_rate, @status, @created_at)
     `).run(data),
   update: (id: number, data: Partial<Channel>) => {
-    const fields = Object.keys(data).map(k => `${k} = @${k}`).join(', ')
-    return getDb().prepare(`UPDATE channels SET ${fields} WHERE id = @id`).run({ ...data, id })
+    const ALLOWED = new Set(['name','model_id','api_key','base_url','billing_rate','status','health','error_count','last_check_at'])
+    const safe = Object.fromEntries(Object.entries(data).filter(([k]) => ALLOWED.has(k)))
+    if (Object.keys(safe).length === 0) return
+    const fields = Object.keys(safe).map(k => `${k} = @${k}`).join(', ')
+    return getDb().prepare(`UPDATE channels SET ${fields} WHERE id = @id`).run({ ...safe, id })
   },
-  updateHealth: (id: number, health: string, errorCount: number) =>
+  updateHealth: (id: number, health: 'healthy' | 'degraded' | 'down' | 'unknown', errorCount: number) =>
     getDb().prepare('UPDATE channels SET health = ?, error_count = ?, last_check_at = ? WHERE id = ?')
       .run(health, errorCount, Date.now(), id),
   delete: (id: number) => getDb().prepare('DELETE FROM channels WHERE id = ?').run(id),
@@ -72,8 +75,11 @@ export const keyQueries = {
       VALUES (@key, @name, @credits, @credits_limit, @status, @created_at)
     `).run(data),
   update: (id: number, data: Partial<RelayKey>) => {
-    const fields = Object.keys(data).map(k => `${k} = @${k}`).join(', ')
-    return getDb().prepare(`UPDATE relay_keys SET ${fields} WHERE id = @id`).run({ ...data, id })
+    const ALLOWED = new Set(['name','credits','credits_limit','status','last_used_at'])
+    const safe = Object.fromEntries(Object.entries(data).filter(([k]) => ALLOWED.has(k)))
+    if (Object.keys(safe).length === 0) return
+    const fields = Object.keys(safe).map(k => `${k} = @${k}`).join(', ')
+    return getDb().prepare(`UPDATE relay_keys SET ${fields} WHERE id = @id`).run({ ...safe, id })
   },
   deductCredits: (id: number, amount: number) =>
     getDb().prepare('UPDATE relay_keys SET credits = credits - ?, last_used_at = ? WHERE id = ?')
@@ -117,12 +123,14 @@ export const logQueries = {
     const sevenDaysAgo = todayTs - 7 * 24 * 60 * 60 * 1000
 
     const todayStats = getDb().prepare(`
-      SELECT COUNT(*) as calls, SUM(prompt_tokens + completion_tokens) as tokens, SUM(credits_used) as credits
+      SELECT COUNT(*) as calls,
+             COALESCE(SUM(prompt_tokens + completion_tokens), 0) as tokens,
+             COALESCE(SUM(credits_used), 0) as credits
       FROM call_logs WHERE created_at >= ?
     `).get(todayTs) as { calls: number; tokens: number; credits: number }
 
     const daily = getDb().prepare(`
-      SELECT date(created_at/1000, 'unixepoch') as date, COUNT(*) as calls
+      SELECT date(created_at/1000, 'unixepoch', 'localtime') as date, COUNT(*) as calls
       FROM call_logs WHERE created_at >= ? GROUP BY date ORDER BY date
     `).all(sevenDaysAgo) as { date: string; calls: number }[]
 

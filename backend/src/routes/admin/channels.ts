@@ -43,7 +43,7 @@ channelsRouter.post('/:id/check', async (req, res) => {
       headers: { Authorization: `Bearer ${channel.api_key}` },
       signal: AbortSignal.timeout(10000),
     })
-    const healthy = r.ok || r.status === 404
+    const healthy = r.ok || r.status === 401 || r.status === 404
     channelQueries.updateHealth(channel.id, healthy ? 'healthy' : 'down', healthy ? 0 : channel.error_count + 1)
     res.json({ health: healthy ? 'healthy' : 'down' })
   } catch {

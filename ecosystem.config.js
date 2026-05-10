@@ -4,6 +4,7 @@ module.exports = {
       name: 'yunashuo-backend',
       cwd: './backend',
       script: 'dist/index.js',
+      env_file: '../.env.local',
       env: {
         NODE_ENV: 'production',
         PORT: 3001,
